@@ -12,6 +12,13 @@ def _invalidar(keys):
         _cache[key] = None
 
 
+def _normalizar_datas(df: pd.DataFrame, col: str = "data") -> pd.DataFrame:
+    df = df.copy()
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+    return df
+
+
 def load_transacoes() -> pd.DataFrame:
     if _cache["transacoes"] is not None:
         return _cache["transacoes"]
@@ -19,7 +26,8 @@ def load_transacoes() -> pd.DataFrame:
     if not path.exists():
         df = pd.DataFrame(columns=["data", "categoria", "valor", "descricao"])
     else:
-        df = pd.read_csv(path, parse_dates=["data"])
+        df = pd.read_csv(path)
+    df = _normalizar_datas(df)
     _cache["transacoes"] = df
     return df
 
@@ -60,11 +68,20 @@ def load_historico_atendimento() -> pd.DataFrame:
     return df
 
 
+def _formatar_para_csv(df: pd.DataFrame, col: str = "data") -> pd.DataFrame:
+    df = df.copy()
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce").dt.strftime("%Y-%m-%d")
+    return df
+
+
 def salvar_transacao(nova_transacao: dict) -> None:
     path = DATA_DIR / "transacoes.csv"
     df = load_transacoes()
-    df = pd.concat([df, pd.DataFrame([nova_transacao])], ignore_index=True)
-    df.to_csv(path, index=False)
+    novo_df = pd.DataFrame([nova_transacao])
+    novo_df = _normalizar_datas(novo_df)
+    df = pd.concat([df, novo_df], ignore_index=True)
+    _formatar_para_csv(df).to_csv(path, index=False)
     _invalidar(["transacoes"])
 
 
@@ -82,9 +99,9 @@ def salvar_conversa(pergunta: str, resposta: str) -> None:
 def importar_transacoes(registros: list[dict]) -> int:
     path = DATA_DIR / "transacoes.csv"
     df = load_transacoes()
-    df_novo = pd.DataFrame(registros)
+    df_novo = _normalizar_datas(pd.DataFrame(registros))
     if not df_novo.empty:
         df = pd.concat([df, df_novo], ignore_index=True)
-        df.to_csv(path, index=False)
+        _formatar_para_csv(df).to_csv(path, index=False)
     _invalidar(["transacoes"])
     return len(registros)
