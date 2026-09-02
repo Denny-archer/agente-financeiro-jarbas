@@ -1,7 +1,13 @@
 import pandas as pd
 
 
-def montar_contexto(pergunta: str, perfil: dict, transacoes: pd.DataFrame, produtos: list[dict]) -> str:
+def montar_contexto(
+    pergunta: str,
+    perfil: dict,
+    transacoes: pd.DataFrame,
+    produtos: list[dict],
+    historico: pd.DataFrame | None = None,
+) -> str:
     """
     Seleciona apenas o recorte relevante da base de conhecimento para a pergunta,
     em vez de injetar tudo no prompt (reduz alucinação e mantém o contexto enxuto).
@@ -16,17 +22,32 @@ def montar_contexto(pergunta: str, perfil: dict, transacoes: pd.DataFrame, produ
         p for p in produtos if p["nome"].lower() in pergunta.lower()
     ] or produtos  # se nada bater, inclui todos (lista costuma ser pequena no MVP)
 
-    produtos_texto = "\n".join(f"- {p['nome']}: {p['descricao']}" for p in produtos_relevantes)
+    produtos_texto = "\n".join(
+        f"- {p['nome']}: {p['descricao']}" for p in produtos_relevantes
+    )
 
-    return f"""
-Perfil do Cliente:
-- Nome: {perfil.get('nome')}
-- Perfil de investidor: {perfil.get('perfil')}
-- Saldo disponível: R$ {perfil.get('saldo_disponivel'):.2f}
+    historico_texto = ""
+    if historico is not None and not historico.empty:
+        ultimas_conversas = historico.sort_values("data", ascending=False).head(5)
+        historico_texto = "\n".join(
+            f"- {row['data'].date()} | Usuário: {row['pergunta']} | Jarbas: {row['resposta']}"
+            for _, row in ultimas_conversas.iterrows()
+        )
 
-Últimas transações:
-{transacoes_texto}
+    partes = [
+        "Perfil do Cliente:",
+        f"- Nome: {perfil.get('nome')}",
+        f"- Perfil de investidor: {perfil.get('perfil')}",
+        f"- Saldo disponível: R$ {perfil.get('saldo_disponivel'):.2f}",
+        "",
+        "Últimas transações:",
+        transacoes_texto,
+        "",
+        "Produtos financeiros relevantes:",
+        produtos_texto,
+    ]
 
-Produtos financeiros relevantes:
-{produtos_texto}
-""".strip()
+    if historico_texto:
+        partes += ["", "Histórico de conversas anteriores:", historico_texto]
+
+    return "\n".join(partes)

@@ -1,12 +1,19 @@
 from datetime import date
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class GastoIn(BaseModel):
     data: date
-    categoria: str
+    categoria: str | None = None
     valor: float = Field(gt=0)
     descricao: str = ""
+
+    @field_validator("categoria")
+    @classmethod
+    def normalizar_categoria(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.strip().title()
 
 
 class ChatIn(BaseModel):
@@ -28,3 +35,9 @@ class AlertaOut(BaseModel):
     gasto_atual: float
     limite: float
     mensagem: str
+
+
+class ImportacaoOut(BaseModel):
+    total: int
+    importados: int
+    erros: list[dict]

@@ -1,33 +1,90 @@
 import json
+from datetime import date
+
 import pandas as pd
 from app.config import DATA_DIR
 
+_cache = {"transacoes": None, "perfil": None, "produtos": None, "historico": None}
+
+
+def _invalidar(keys):
+    for key in keys:
+        _cache[key] = None
+
 
 def load_transacoes() -> pd.DataFrame:
+    if _cache["transacoes"] is not None:
+        return _cache["transacoes"]
     path = DATA_DIR / "transacoes.csv"
-    return pd.read_csv(path, parse_dates=["data"])
+    if not path.exists():
+        df = pd.DataFrame(columns=["data", "categoria", "valor", "descricao"])
+    else:
+        df = pd.read_csv(path, parse_dates=["data"])
+    _cache["transacoes"] = df
+    return df
 
 
 def load_perfil_investidor() -> dict:
+    if _cache["perfil"] is not None:
+        return _cache["perfil"]
     path = DATA_DIR / "perfil_investidor.json"
+    if not path.exists():
+        _cache["perfil"] = {}
+        return _cache["perfil"]
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        _cache["perfil"] = json.load(f)
+    return _cache["perfil"]
 
 
 def load_produtos_financeiros() -> list[dict]:
+    if _cache["produtos"] is not None:
+        return _cache["produtos"]
     path = DATA_DIR / "produtos_financeiros.json"
+    if not path.exists():
+        _cache["produtos"] = []
+        return _cache["produtos"]
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        _cache["produtos"] = json.load(f)
+    return _cache["produtos"]
 
 
 def load_historico_atendimento() -> pd.DataFrame:
+    if _cache["historico"] is not None:
+        return _cache["historico"]
     path = DATA_DIR / "historico_atendimento.csv"
-    return pd.read_csv(path, parse_dates=["data"])
+    if not path.exists():
+        df = pd.DataFrame(columns=["data", "pergunta", "resposta"])
+    else:
+        df = pd.read_csv(path, parse_dates=["data"])
+    _cache["historico"] = df
+    return df
 
 
 def salvar_transacao(nova_transacao: dict) -> None:
-    """Adiciona um novo gasto ao transacoes.csv (persistência simples para o MVP)."""
     path = DATA_DIR / "transacoes.csv"
     df = load_transacoes()
     df = pd.concat([df, pd.DataFrame([nova_transacao])], ignore_index=True)
     df.to_csv(path, index=False)
+    _invalidar(["transacoes"])
+
+
+def salvar_conversa(pergunta: str, resposta: str) -> None:
+    path = DATA_DIR / "historico_atendimento.csv"
+    df = load_historico_atendimento()
+    nova = pd.DataFrame(
+        [{"data": date.today().isoformat(), "pergunta": pergunta, "resposta": resposta}]
+    )
+    df = pd.concat([df, nova], ignore_index=True)
+    df.to_csv(path, index=False)
+    _invalidar(["historico"])
+
+
+def importar_transacoes(registros: list[dict]) -> int:
+    path = DATA_DIR / "transacoes.csv"
+    df = load_transacoes()
+    df_novo = pd.DataFrame(registros)
+    if not df_novo.empty:
+        df = pd.concat([df, df_novo], ignore_index=True)
+        df.to_csv(path, index=False)
+    _invalidar(["transacoes"])
+    return len(registros)
